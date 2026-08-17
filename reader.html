@@ -24,6 +24,8 @@
       :root {
         --md-primary: #1a73e8;
         --md-primary-dark: #0d47a1;
+        --md-success: #1e8e3e;
+        --md-success-dark: #145c27;
         --md-bg: #202124;
         --md-bg-secondary: #111214;
         --md-text: #e8eaed;
@@ -103,10 +105,10 @@
         overflow: hidden;
         background: #fff;
         line-height: 0;
-        transition: opacity 0.25s ease;
+        /* Hapus transition opacity agar ganti halaman terasa lebih instan/tidak nge-lag visual */
       }
       #canvas-container.loading {
-        opacity: 0;
+        display: none;
       }
       canvas {
         display: block;
@@ -189,9 +191,7 @@
         padding: 10px 18px;
         border-radius: 24px;
         box-shadow: var(--md-elevation-2);
-        transition:
-          background 0.2s ease,
-          transform 0.1s ease;
+        transition: background 0.2s ease, transform 0.1s ease;
         user-select: none;
       }
       .nav-btn:active {
@@ -207,6 +207,15 @@
         box-shadow: none;
         transform: none;
       }
+      
+      /* Tombol state ketika di halaman terakhir */
+      .nav-btn.selesai {
+        background: var(--md-success);
+      }
+      .nav-btn.selesai:hover {
+        background: var(--md-success-dark);
+      }
+
       .nav-btn .material-icons {
         font-size: 20px;
       }
@@ -269,9 +278,9 @@
   <body>
     <div id="app">
       <header>
-        <a class="back" href="index.html"
-          ><span class="material-icons">arrow_back</span></a
-        >
+        <a class="back" href="index.html">
+          <span class="material-icons">arrow_back</span>
+        </a>
         <h1 id="comic-title">Komik</h1>
       </header>
 
@@ -300,171 +309,218 @@
       </footer>
     </div>
 
-   <script>
-  const params = new URLSearchParams(window.location.search);
-  const PDF_URL = params.get('file') || 'komik.pdf';
-  const COMIC_TITLE = params.get('title') || 'Komik Matematika';
+    <script>
+      const params = new URLSearchParams(window.location.search);
+      const PDF_URL = params.get("file") || "komik.pdf";
+      const COMIC_TITLE = params.get("title") || "Komik Matematika";
 
-  document.getElementById('comic-title').textContent = COMIC_TITLE;
+      document.getElementById("comic-title").textContent = COMIC_TITLE;
 
-  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      pdfjsLib.GlobalWorkerOptions.workerSrc =
+        "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 
-  const canvas = document.getElementById('pdf-canvas');
-  const ctx = canvas.getContext('2d', { alpha: false }); // OPTIMASI: Nonaktifkan transparansi alpha untuk render lebih cepat
-  const canvasContainer = document.getElementById('canvas-container');
-  const loader = document.getElementById('loader');
-  const viewerWrap = document.getElementById('viewer-wrap');
-  const pageIndicator = document.getElementById('page-indicator');
-  const prevBtn = document.getElementById('prevBtn');
-  const nextBtn = document.getElementById('nextBtn');
+      const canvas = document.getElementById("pdf-canvas");
+      const ctx = canvas.getContext("2d", { alpha: false }); 
+      const canvasContainer = document.getElementById("canvas-container");
+      const loader = document.getElementById("loader");
+      const viewerWrap = document.getElementById("viewer-wrap");
+      const pageIndicator = document.getElementById("page-indicator");
+      const prevBtn = document.getElementById("prevBtn");
+      const nextBtn = document.getElementById("nextBtn");
 
-  let pdfDoc = null;
-  let currentPage = 1;
-  let totalPages = 0;
-  let renderingInProgress = false;
-  let pendingPage = null;
+      let pdfDoc = null;
+      let currentPage = 1;
+      let totalPages = 0;
+      let renderingInProgress = false;
+      let pendingPage = null;
+      let isFirstLoad = true; // Indikator tambahan untuk loading awal saja
 
-  function getFitScale(viewport) {
-    const containerWidth = viewerWrap.clientWidth * (window.innerWidth >= 1024 ? 0.7 : 0.94);
-    const containerHeight = viewerWrap.clientHeight * 0.94;
-    const scaleW = containerWidth / viewport.width;
-    const scaleH = containerHeight / viewport.height;
-    // OPTIMASI: Turunkan batas max zoom dari 2.5 menjadi 2.0 agar memori tidak bengkak
-    return Math.min(scaleW, scaleH, 2.0); 
-  }
-
-  function renderPage(num) {
-    if (renderingInProgress) { pendingPage = num; return; }
-    renderingInProgress = true;
-    canvasContainer.classList.add('loading');
-
-    pdfDoc.getPage(num).then(page => {
-      const baseViewport = page.getViewport({ scale: 1 });
-      const scale = getFitScale(baseViewport);
-      const viewport = page.getViewport({ scale });
-
-      // OPTIMASI PALING PENTING: Batasi devicePixelRatio maksimal 2 (Mencegah lag di HP Flagship / Mac)
-      const outputScale = Math.min(window.devicePixelRatio || 1, 2);
-      
-      canvas.width = Math.floor(viewport.width * outputScale);
-      canvas.height = Math.floor(viewport.height * outputScale);
-      canvas.style.width = Math.floor(viewport.width) + 'px';
-      canvas.style.height = Math.floor(viewport.height) + 'px';
-
-      const transform = outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : null;
-
-      // RenderTask
-      const renderContext = { canvasContext: ctx, viewport: viewport, transform: transform };
-      return page.render(renderContext).promise;
-    }).then(() => {
-      renderingInProgress = false;
-      canvasContainer.classList.remove('loading');
-      loader.classList.add('hidden');
-      updateControls();
-      
-      // OPTIMASI: Panggil preload untuk halaman berikutnya agar tersimpan di memori (RAM)
-      preloadNextPage(num + 1);
-
-      if (pendingPage !== null) {
-        const next = pendingPage;
-        pendingPage = null;
-        renderPage(next);
+      function getFitScale(viewport) {
+        const containerWidth = viewerWrap.clientWidth * (window.innerWidth >= 1024 ? 0.7 : 0.94);
+        const containerHeight = viewerWrap.clientHeight * 0.94;
+        const scaleW = containerWidth / viewport.width;
+        const scaleH = containerHeight / viewport.height;
+        return Math.min(scaleW, scaleH, 2.0); 
       }
-    }).catch(err => {
-      renderingInProgress = false;
-      console.error('Gagal merender halaman:', err);
-      showError('Gagal menampilkan halaman ' + num + '.', err.message);
-    });
-  }
 
-  // FUNGSI BARU: Preload halaman di belakang layar
-  function preloadNextPage(nextNum) {
-    if (nextNum <= totalPages && pdfDoc) {
-      pdfDoc.getPage(nextNum).catch(err => {
-         // Abaikan error preload agar tidak mengganggu UI
+      function renderPage(num) {
+        if (renderingInProgress) {
+          pendingPage = num;
+          return;
+        }
+        renderingInProgress = true;
+
+        // Hanya tampilkan loading spinner di halaman pertama
+        if (isFirstLoad) {
+          canvasContainer.classList.add("loading");
+          loader.classList.remove("hidden");
+        }
+
+        pdfDoc
+          .getPage(num)
+          .then((page) => {
+            const baseViewport = page.getViewport({ scale: 1 });
+            const scale = getFitScale(baseViewport);
+            const viewport = page.getViewport({ scale });
+
+            // OPTIMASI: Turunkan lagi limit ratio menjadi 1.5 agar membalik halaman sangat ringan
+            const outputScale = Math.min(window.devicePixelRatio || 1, 1.5);
+
+            canvas.width = Math.floor(viewport.width * outputScale);
+            canvas.height = Math.floor(viewport.height * outputScale);
+            canvas.style.width = Math.floor(viewport.width) + "px";
+            canvas.style.height = Math.floor(viewport.height) + "px";
+
+            const transform = outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : null;
+
+            return page.render({ canvasContext: ctx, viewport, transform }).promise;
+          })
+          .then(() => {
+            renderingInProgress = false;
+            
+            // Hapus status loading secara permanen setelah halaman pertama sukses
+            isFirstLoad = false;
+            canvasContainer.classList.remove("loading");
+            loader.classList.add("hidden");
+            
+            updateControls();
+            preloadNextPage(num + 1);
+
+            if (pendingPage !== null) {
+              const next = pendingPage;
+              pendingPage = null;
+              renderPage(next);
+            }
+          })
+          .catch((err) => {
+            renderingInProgress = false;
+            console.error("Gagal merender halaman:", err);
+            showError("Gagal menampilkan halaman " + num + ".", err.message);
+          });
+      }
+
+      function preloadNextPage(nextNum) {
+        if (nextNum <= totalPages && pdfDoc) {
+          pdfDoc.getPage(nextNum).catch(() => {});
+        }
+      }
+
+      function updateControls() {
+        pageIndicator.textContent = currentPage + " / " + totalPages;
+        prevBtn.disabled = currentPage <= 1;
+
+        // Logika Mengubah Tombol "Lanjut" menjadi "Selesai" di halaman terakhir
+        const nextBtnText = nextBtn.querySelector("span:first-of-type");
+        const nextBtnIcon = nextBtn.querySelector("span.material-icons");
+
+        if (currentPage >= totalPages) {
+          nextBtnText.textContent = "Selesai";
+          nextBtnIcon.textContent = "home"; // Mengganti ikon panah dengan ikon home
+          nextBtn.classList.add("selesai");
+        } else {
+          nextBtnText.textContent = "Lanjut";
+          nextBtnIcon.textContent = "chevron_right";
+          nextBtn.classList.remove("selesai");
+        }
+      }
+
+      function goToPage(num) {
+        if (num < 1 || num > totalPages) return;
+        currentPage = num;
+        viewerWrap.scrollTop = 0;
+        renderPage(currentPage);
+      }
+
+      function actionNextOrFinish() {
+        if (currentPage >= totalPages) {
+          // Redirect ke halaman index/home jika sudah halaman terakhir
+          window.location.href = "./";
+        } else {
+          goToPage(currentPage + 1);
+        }
+      }
+
+      function showError(title, detail) {
+        loader.classList.remove("hidden");
+        loader.innerHTML = `
+          <span class="material-icons" style="font-size:38px;color:#f28b82;">error_outline</span>
+          <span class="err-title">${title}</span>
+          <span class="msg">Periksa: nama file PDF sudah tepat dan halaman dibuka lewat http/https.</span>
+          ${detail ? `<span class="err-detail">${detail}</span>` : ""}
+        `;
+      }
+
+      // === Event Listeners ===
+      prevBtn.addEventListener("click", () => goToPage(currentPage - 1));
+      document.getElementById("tapLeft").addEventListener("click", () => goToPage(currentPage - 1));
+
+      // Gunakan fungsi actionNextOrFinish untuk Next
+      nextBtn.addEventListener("click", actionNextOrFinish);
+      document.getElementById("tapRight").addEventListener("click", actionNextOrFinish);
+
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "ArrowRight") actionNextOrFinish();
+        if (e.key === "ArrowLeft") goToPage(currentPage - 1);
       });
-    }
-  }
 
-  function updateControls() {
-    pageIndicator.textContent = currentPage + ' / ' + totalPages;
-    prevBtn.disabled = currentPage <= 1;
-    nextBtn.disabled = currentPage >= totalPages;
-  }
+      let touchStartX = 0;
+      viewerWrap.addEventListener("touchstart", (e) => {
+          touchStartX = e.changedTouches[0].screenX;
+        }, { passive: true }
+      );
+      viewerWrap.addEventListener("touchend", (e) => {
+          const diff = e.changedTouches[0].screenX - touchStartX;
+          if (Math.abs(diff) > 50) {
+            diff < 0 ? actionNextOrFinish() : goToPage(currentPage - 1);
+          }
+        }, { passive: true }
+      );
 
-  function goToPage(num) {
-    if (num < 1 || num > totalPages) return;
-    currentPage = num;
-    viewerWrap.scrollTop = 0;
-    renderPage(currentPage);
-  }
+      let resizeTimeout;
+      window.addEventListener("resize", () => {
+        clearTimeout(resizeTimeout);
+        resizeTimeout = setTimeout(() => {
+          if (pdfDoc) renderPage(currentPage);
+        }, 200);
+      });
 
-  function showError(title, detail) {
-    loader.classList.remove('hidden');
-    loader.innerHTML = `
-      <span class="material-icons" style="font-size:38px;color:#f28b82;">error_outline</span>
-      <span class="err-title">${title}</span>
-      <span class="msg">Periksa: nama file PDF sudah tepat (huruf besar/kecil ikut dicek di server), file berada di folder yang sama, dan halaman dibuka lewat http/https.</span>
-      ${detail ? `<span class="err-detail">${detail}</span>` : ''}
-    `;
-  }
+      // === Anti-Screenshot & Proteksi Dasar ===
+      document.addEventListener("contextmenu", (e) => e.preventDefault());
+      document.addEventListener("keydown", (e) => {
+        if (e.ctrlKey || e.metaKey) {
+          const key = e.key.toLowerCase();
+          if (key === "p" || key === "s" || key === "c" || key === "u") {
+            e.preventDefault();
+            alert("Tindakan ini tidak diizinkan.");
+          }
+        }
+      });
+      document.addEventListener("keyup", (e) => {
+        if (e.key === "PrintScreen") {
+          navigator.clipboard.writeText("Screenshot dilarang.").catch(() => {});
+          alert("Anda mencoba melakukan screenshot! Tindakan ini dilarang.");
+        }
+      });
+      window.addEventListener("blur", () => {
+        document.body.style.filter = "blur(10px)";
+      });
+      window.addEventListener("focus", () => {
+        document.body.style.filter = "none";
+      });
 
-  // Event Listeners Navigasi
-  prevBtn.addEventListener('click', () => goToPage(currentPage - 1));
-  nextBtn.addEventListener('click', () => goToPage(currentPage + 1));
-  document.getElementById('tapLeft').addEventListener('click', () => goToPage(currentPage - 1));
-  document.getElementById('tapRight').addEventListener('click', () => goToPage(currentPage + 1));
-
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'ArrowRight') goToPage(currentPage + 1);
-    if (e.key === 'ArrowLeft') goToPage(currentPage - 1);
-  });
-
-  // Swipe gesture
-  let touchStartX = 0;
-  viewerWrap.addEventListener('touchstart', (e) => { touchStartX = e.changedTouches[0].screenX; }, { passive: true });
-  viewerWrap.addEventListener('touchend', (e) => {
-    const diff = e.changedTouches[0].screenX - touchStartX;
-    if (Math.abs(diff) > 50) { diff < 0 ? goToPage(currentPage + 1) : goToPage(currentPage - 1); }
-  }, { passive: true });
-
-  // Resize listener
-  let resizeTimeout;
-  window.addEventListener('resize', () => {
-    clearTimeout(resizeTimeout);
-    resizeTimeout = setTimeout(() => { if (pdfDoc) renderPage(currentPage); }, 200);
-  });
-
-  // Anti-Screenshot & Proteksi
-  document.addEventListener('contextmenu', (e) => e.preventDefault());
-  document.addEventListener('keydown', (e) => {
-    if (e.ctrlKey || e.metaKey) { 
-      const key = e.key.toLowerCase();
-      if (key === 'p' || key === 's' || key === 'c' || key === 'u') {
-        e.preventDefault();
-        alert('Tindakan ini tidak diizinkan.');
-      }
-    }
-  });
-  document.addEventListener('keyup', (e) => {
-    if (e.key === 'PrintScreen') {
-      navigator.clipboard.writeText('Screenshot dilarang pada halaman ini.').catch(()=>{});
-      alert('Anda mencoba melakukan screenshot! Tindakan ini dilarang.');
-    }
-  });
-  window.addEventListener('blur', () => { document.body.style.filter = 'blur(10px)'; });
-  window.addEventListener('focus', () => { document.body.style.filter = 'none'; });
-
-  // Load PDF Document
-  const urlWithCacheBust = PDF_URL + (PDF_URL.includes('?') ? '&' : '?') + 'v=' + Date.now();
-  pdfjsLib.getDocument(urlWithCacheBust).promise.then(doc => {
-    pdfDoc = doc;
-    totalPages = doc.numPages;
-    renderPage(currentPage);
-  }).catch(err => {
-    console.error(err);
-    showError('Gagal memuat PDF "' + PDF_URL + '".', err.message || String(err));
-  });
-</script>
+      // === Load PDF Document ===
+      const urlWithCacheBust = PDF_URL + (PDF_URL.includes("?") ? "&" : "?") + "v=" + Date.now();
+      pdfjsLib
+        .getDocument({ url: urlWithCacheBust })
+        .promise.then((doc) => {
+          pdfDoc = doc;
+          totalPages = doc.numPages;
+          renderPage(currentPage);
+        })
+        .catch((err) => {
+          console.error(err);
+          showError('Gagal memuat PDF "' + PDF_URL + '".', err.message || String(err));
+        });
+    </script>
   </body>
 </html>
